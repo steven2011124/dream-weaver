@@ -161,7 +161,6 @@ export async function streamChat({
   onDone,
   onError,
   signal,
-  _isFallback,
 }: {
   messages: { role: Role; content: string }[];
   model?: string;
@@ -170,15 +169,9 @@ export async function streamChat({
   onDone: () => void;
   onError: (err: string) => void;
   signal?: AbortSignal;
-  _isFallback?: boolean;
 }) {
-  // Route Anthropic models directly to chat-claude.
-  const isClaude = typeof model === "string" && model.startsWith("anthropic/");
-  const endpoint = isClaude ? "chat-claude" : "chat";
-  const claudeModel = isClaude ? model!.replace("anthropic/", "") : undefined;
-
   try {
-    const resp = await fetch(`${PROJECT_URL}/functions/v1/${endpoint}`, {
+    const resp = await fetch(`${PROJECT_URL}/functions/v1/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -186,7 +179,7 @@ export async function streamChat({
       },
       body: JSON.stringify({
         messages,
-        model: isClaude ? claudeModel : model,
+        model,
         systemPrompt,
       }),
       signal,
@@ -200,26 +193,8 @@ export async function streamChat({
       } catch {
         // ignore
       }
-
-      // Auto-fallback to Claude on 402 (Lovable AI credits exhausted) once.
-      if (resp.status === 402 && !_isFallback && !isClaude) {
-        console.warn("[sarvis] Lovable AI credits exhausted — falling back to Claude.");
-        await streamChat({
-          messages,
-          model: "anthropic/claude-3-5-haiku-latest",
-          systemPrompt,
-          onDelta,
-          onDone: () => {
-            onDelta("\n\n_(Switched to Claude — Lovable AI credits are exhausted. Add credits in Settings → Workspace → Usage.)_");
-            onDone();
-          },
-          onError,
-          signal,
-          _isFallback: true,
-        });
-        return;
-      }
-
+      if (resp.status === 429) msg = "Rate limit reached. Please wait a moment and try again.";
+      if (resp.status === 402) msg = "AI credits exhausted. Add credits in Settings → Workspace → Usage.";
       onError(msg);
       return;
     }

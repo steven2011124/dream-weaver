@@ -1,5 +1,6 @@
-// Gmail edge function — list inbox + send email.
+// Gmail edge function — list inbox, get message, mark read, send email.
 // Uses the GOOGLE_REFRESH_TOKEN to auto-mint short-lived access tokens.
+// (re-deploy trigger)
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,6 +65,7 @@ interface MessageMeta {
 }
 
 Deno.serve(async (req) => {
+  console.log("[google-gmail] request received");
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {

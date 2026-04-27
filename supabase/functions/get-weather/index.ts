@@ -1,7 +1,7 @@
-// Open-Meteo weather + 3-day forecast — no API key required.
+// Open-Meteo weather + 4-day forecast — no API key required.
 // Body: { lat?: number, lon?: number, place?: string }
 // If lat/lon missing, geocodes "place" via Open-Meteo's free geocoder.
-// (re-deploy trigger)
+// v2 — deployed via Lovable Cloud (no manual supabase CLI step).
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +21,7 @@ const WMO: Record<number, string> = {
 };
 
 Deno.serve(async (req) => {
-  console.log("[get-weather] request received");
+  console.log("[get-weather v3] request received", req.method);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const json = (body: unknown, status = 200) =>

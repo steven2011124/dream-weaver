@@ -14,7 +14,11 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+// Generous default body limit so chat history + base64 audio chunks fit
+// without triggering PayloadTooLargeError. Per-route limits below override
+// only when even bigger payloads are expected (e.g. GGUF uploads).
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Detect OS
 const getOS = () => {
@@ -560,13 +564,12 @@ app.listen(PORT, () => {
 
 // Simple AI mode state and helpers (online/offline + model uploads)
 let aiMode = { mode: 'online', model: null };
-const MODELS_DIR = new URL('../', import.meta.url).pathname; // project root
 
 app.get('/api/ai-mode', (req, res) => {
   res.json(aiMode);
 });
 
-app.post('/api/ai-mode', express.json(), (req, res) => {
+app.post('/api/ai-mode', (req, res) => {
   try {
     const { mode, model } = req.body || {};
     if (mode && (mode === 'online' || mode === 'offline')) {
@@ -811,7 +814,7 @@ app.post("/api/file/list", (req, res) => {
 });
 
 // Adaptive learning endpoint: generate structured course material for a topic
-app.post('/api/learn', express.json({ limit: '1mb' }), async (req, res) => {
+app.post('/api/learn', async (req, res) => {
   try {
     const { topic, interests = [], level = 'Beginner', saveProfile = false, profile = null } = req.body || {};
     if (!topic || typeof topic !== 'string') return res.status(400).json({ error: 'missing topic' });

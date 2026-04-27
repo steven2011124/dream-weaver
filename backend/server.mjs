@@ -814,7 +814,7 @@ app.post("/api/file/list", (req, res) => {
 });
 
 // Adaptive learning endpoint: generate structured course material for a topic
-app.post('/api/learn', express.json({ limit: '1mb' }), async (req, res) => {
+app.post('/api/learn', async (req, res) => {
   try {
     const { topic, interests = [], level = 'Beginner', saveProfile = false, profile = null } = req.body || {};
     if (!topic || typeof topic !== 'string') return res.status(400).json({ error: 'missing topic' });

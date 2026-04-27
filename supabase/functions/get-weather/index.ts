@@ -1,6 +1,7 @@
 // Open-Meteo weather + 3-day forecast — no API key required.
 // Body: { lat?: number, lon?: number, place?: string }
 // If lat/lon missing, geocodes "place" via Open-Meteo's free geocoder.
+// (re-deploy trigger)
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

@@ -101,8 +101,13 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("google-calendar error", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "error" }), {
-      status: 500,
+    const msg = e instanceof Error ? e.message : "error";
+    const friendly = /insufficient|PERMISSION_DENIED|ACCESS_TOKEN_SCOPE/i.test(msg)
+      ? "Calendar scope missing on your Google refresh token. Re-authorize Google with the https://www.googleapis.com/auth/calendar scope and update GOOGLE_REFRESH_TOKEN."
+      : msg;
+    // Return 200 so the UI widget can render the error gracefully.
+    return new Response(JSON.stringify({ error: friendly }), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

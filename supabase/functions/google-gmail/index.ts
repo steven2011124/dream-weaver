@@ -1,6 +1,6 @@
 // Gmail edge function — list inbox, get message, mark read, send email.
-// Uses the GOOGLE_REFRESH_TOKEN to auto-mint short-lived access tokens.
-// (re-deploy trigger)
+// Uses GOOGLE_REFRESH_TOKEN to auto-mint short-lived access tokens.
+// v2 — adds get/markRead actions used by the dashboard widget.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

@@ -36,6 +36,13 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
 GGUF_PATH = os.environ.get("SARVIS_GGUF_PATH", "")
 HF_MODEL = os.environ.get("SARVIS_HF_MODEL", "")
 
+# Per-model defaults: ctx window + max new tokens. Tuned for speed/quality
+# balance on a typical laptop. Override via env if you have more VRAM.
+NUM_CTX = int(os.environ.get("SARVIS_NUM_CTX", "8192"))
+NUM_PREDICT = int(os.environ.get("SARVIS_NUM_PREDICT", "1024"))
+TEMPERATURE = float(os.environ.get("SARVIS_TEMPERATURE", "0.7"))
+TOP_P = float(os.environ.get("SARVIS_TOP_P", "0.9"))
+
 
 # ---- Adapters ------------------------------------------------------------
 
@@ -46,7 +53,12 @@ def _try_ollama(messages: list[dict[str, str]], system: str | None) -> str | Non
         "messages": ([{"role": "system", "content": system}] if system else [])
         + messages,
         "stream": False,
-        "options": {"temperature": 0.7},
+        "options": {
+            "temperature": TEMPERATURE,
+            "top_p": TOP_P,
+            "num_ctx": NUM_CTX,
+            "num_predict": NUM_PREDICT,
+        },
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -72,9 +84,19 @@ def _try_llama_cpp(messages: list[dict[str, str]], system: str | None) -> str | 
         if _LLAMA is None:
             from llama_cpp import Llama  # type: ignore
 
-            _LLAMA = Llama(model_path=GGUF_PATH, n_ctx=4096, verbose=False)
+            _LLAMA = Llama(
+                model_path=GGUF_PATH,
+                n_ctx=NUM_CTX,
+                n_threads=os.cpu_count() or 4,
+                verbose=False,
+            )
         full_messages = ([{"role": "system", "content": system}] if system else []) + messages
-        out = _LLAMA.create_chat_completion(messages=full_messages, max_tokens=512)  # type: ignore
+        out = _LLAMA.create_chat_completion(
+            messages=full_messages,
+            max_tokens=NUM_PREDICT,
+            temperature=TEMPERATURE,
+            top_p=TOP_P,
+        )  # type: ignore
         return out["choices"][0]["message"]["content"]
     except Exception:
         return None
@@ -97,7 +119,13 @@ def _try_transformers(messages: list[dict[str, str]], system: str | None) -> str
             prompt_parts.append(f"<|{m['role']}|>\n{m['content']}\n")
         prompt_parts.append("<|assistant|>\n")
         prompt = "".join(prompt_parts)
-        out = _HF_PIPE(prompt, max_new_tokens=512, do_sample=True, temperature=0.7)  # type: ignore
+        out = _HF_PIPE(
+            prompt,
+            max_new_tokens=NUM_PREDICT,
+            do_sample=True,
+            temperature=TEMPERATURE,
+            top_p=TOP_P,
+        )  # type: ignore
         text = out[0]["generated_text"][len(prompt) :]
         return text.strip()
     except Exception:
@@ -140,7 +168,13 @@ def handle(req: dict[str, Any]) -> dict[str, Any]:
 
 def main() -> None:
     # First line on startup: a status banner so the parent can detect readiness.
-    sys.stdout.write(json.dumps({"ready": True, "ollama_host": OLLAMA_HOST, "ollama_model": OLLAMA_MODEL}) + "\n")
+    sys.stdout.write(json.dumps({
+        "ready": True,
+        "ollama_host": OLLAMA_HOST,
+        "ollama_model": OLLAMA_MODEL,
+        "num_ctx": NUM_CTX,
+        "num_predict": NUM_PREDICT,
+    }) + "\n")
     sys.stdout.flush()
     for line in sys.stdin:
         line = line.strip()

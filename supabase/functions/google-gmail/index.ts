@@ -65,7 +65,7 @@ interface MessageMeta {
 }
 
 Deno.serve(async (req) => {
-  console.log("[google-gmail] request received");
+  console.log("[google-gmail v3] request received", req.method);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {

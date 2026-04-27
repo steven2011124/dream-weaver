@@ -21,7 +21,7 @@ const WMO: Record<number, string> = {
 };
 
 Deno.serve(async (req) => {
-  console.log("[get-weather] request received");
+  console.log("[get-weather v3] request received", req.method);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const json = (body: unknown, status = 200) =>

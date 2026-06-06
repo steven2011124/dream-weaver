@@ -108,7 +108,7 @@ export function parseNewsRequest(text: string): { isNews: boolean; query: string
 }
 
 export async function getNews(
-  params: { query?: string | null; country?: string; category?: string; pageSize?: number } = {},
+  params: { query?: string | null; country?: string; category?: string; topic?: string; pageSize?: number } = {},
 ): Promise<{ articles?: NewsArticle[]; query?: string | null; error?: string }> {
   try {
     const { data, error } = await supabase.functions.invoke("get-news", {
@@ -121,6 +121,7 @@ export async function getNews(
     return { error: e instanceof Error ? e.message : "News API Error" };
   }
 }
+
 
 // ---------- Weather (Open-Meteo, no key) ----------
 export interface WeatherForecast {

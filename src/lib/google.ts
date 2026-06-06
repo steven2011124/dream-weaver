@@ -201,6 +201,26 @@ export async function searchYouTube(query: string, max = 6): Promise<{ videos?: 
   return { videos: data?.videos ?? [] };
 }
 
+export interface YouTubeTrendingVideo {
+  videoId: string;
+  title: string;
+  description?: string;
+  channel: string;
+  publishedAt: string;
+  thumbnail: string;
+  views: number;
+  likes: number;
+}
+export async function getYouTubeTrending(region = "KE", max = 8): Promise<{ videos?: YouTubeTrendingVideo[]; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("google-youtube", {
+    body: { action: "trending", region, max },
+  });
+  if (error) return { error: error.message };
+  if (data?.error) return { error: data.error };
+  return { videos: data?.videos ?? [] };
+}
+
+
 // ---------- Maps nearby ----------
 export interface NearbyPlace {
   id: string;

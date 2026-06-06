@@ -138,6 +138,28 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "trending") {
+      const region = String(body.region ?? "KE").toUpperCase().slice(0, 2);
+      const max = Math.min(Math.max(parseInt(body.max) || 8, 1), 20);
+      const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=${region}&maxResults=${max}`;
+      const r = await fetch(url, { headers: auth });
+      if (!r.ok) throw new Error(`YouTube trending ${r.status}: ${await r.text()}`);
+      const data = await r.json();
+      const videos = (data.items ?? []).map((v: Record<string, any>) => ({
+        videoId: v.id,
+        title: v.snippet?.title,
+        description: v.snippet?.description,
+        channel: v.snippet?.channelTitle,
+        publishedAt: v.snippet?.publishedAt,
+        thumbnail: v.snippet?.thumbnails?.medium?.url ?? v.snippet?.thumbnails?.high?.url,
+        views: parseInt(v.statistics?.viewCount ?? "0"),
+        likes: parseInt(v.statistics?.likeCount ?? "0"),
+      }));
+      return new Response(JSON.stringify({ videos, region }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: "unknown action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

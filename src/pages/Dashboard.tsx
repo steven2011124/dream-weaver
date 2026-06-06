@@ -49,6 +49,7 @@ const Dashboard = () => {
           <WeatherWidget />
           <DriveWidget />
           <NewsWidget />
+          <TrendingVideosWidget />
           <div className="md:col-span-2 xl:col-span-1">
             <MapsWidget />
           </div>

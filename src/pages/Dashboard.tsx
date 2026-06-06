@@ -6,6 +6,7 @@ import { CalendarWidget } from "@/components/widgets/CalendarWidget";
 import { DriveWidget } from "@/components/widgets/DriveWidget";
 import { YouTubeWidget } from "@/components/widgets/YouTubeWidget";
 import { NewsWidget } from "@/components/widgets/NewsWidget";
+import { TrendingVideosWidget } from "@/components/widgets/TrendingVideosWidget";
 import { MapsWidget } from "@/components/widgets/MapsWidget";
 import { WeatherWidget } from "@/components/widgets/WeatherWidget";
 import { useEffect } from "react";

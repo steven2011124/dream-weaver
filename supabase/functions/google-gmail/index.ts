@@ -77,10 +77,19 @@ Deno.serve(async (req) => {
     if (action === "list") {
       const max = Math.min(Math.max(parseInt(body.max) || 8, 1), 25);
       const q = typeof body.query === "string" ? `&q=${encodeURIComponent(body.query)}` : "";
-      const listResp = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${max}${q}`,
-        { headers: auth },
-      );
+      const listUrl = (withQuery: boolean) =>
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${max}${withQuery ? q : ""}`;
+      let listResp = await fetch(listUrl(true), { headers: auth });
+      if (!listResp.ok) {
+        const errText = await listResp.text();
+        // Tokens granted only gmail.metadata cannot use Gmail's q search. Keep the inbox usable
+        // by falling back to the latest messages instead of returning a hard failure.
+        if (listResp.status === 403 && q && /Metadata scope does not support 'q' parameter/i.test(errText)) {
+          listResp = await fetch(listUrl(false), { headers: auth });
+        } else {
+          throw new Error(`Gmail list ${listResp.status}: ${errText}`);
+        }
+      }
       if (!listResp.ok) throw new Error(`Gmail list ${listResp.status}: ${await listResp.text()}`);
       const list = await listResp.json();
       const ids: { id: string }[] = list.messages ?? [];
@@ -180,10 +189,25 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const r = await fetch(
+      let usedMetadataFallback = false;
+      let r = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
         { headers: auth },
       );
+      if (!r.ok) {
+        const errText = await r.text();
+        // If the saved refresh token still only has gmail.metadata, FULL is forbidden.
+        // Fall back to metadata/snippet so opening a message no longer crashes with 403.
+        if (r.status === 403 && /Metadata scope/i.test(errText)) {
+          usedMetadataFallback = true;
+          r = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+            { headers: auth },
+          );
+        } else {
+          throw new Error(`Gmail get ${r.status}: ${errText}`);
+        }
+      }
       if (!r.ok) throw new Error(`Gmail get ${r.status}: ${await r.text()}`);
       const m = await r.json();
       const headers = (m.payload?.headers ?? []) as { name: string; value: string }[];
@@ -198,23 +222,26 @@ Deno.serve(async (req) => {
           return new TextDecoder("utf-8").decode(bytes);
         } catch { return ""; }
       };
-      let plain = "";
-      let html = "";
-      const walk = (part: Record<string, any>) => {
-        if (!part) return;
-        const mime = part.mimeType ?? "";
-        const data = part.body?.data;
-        if (data && mime === "text/plain" && !plain) plain = decode(data);
-        else if (data && mime === "text/html" && !html) html = decode(data);
-        if (Array.isArray(part.parts)) part.parts.forEach(walk);
-      };
-      walk(m.payload ?? {});
-      const bodyText = plain || (html ? html.replace(/<style[\s\S]*?<\/style>/gi, "")
-        .replace(/<script[\s\S]*?<\/script>/gi, "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/&nbsp;/g, " ")
-        .replace(/\s{2,}/g, " ")
-        .trim() : (m.snippet ?? ""));
+      let bodyText = m.snippet ?? "";
+      if (!usedMetadataFallback) {
+        let plain = "";
+        let html = "";
+        const walk = (part: Record<string, any>) => {
+          if (!part) return;
+          const mime = part.mimeType ?? "";
+          const data = part.body?.data;
+          if (data && mime === "text/plain" && !plain) plain = decode(data);
+          else if (data && mime === "text/html" && !html) html = decode(data);
+          if (Array.isArray(part.parts)) part.parts.forEach(walk);
+        };
+        walk(m.payload ?? {});
+        bodyText = plain || (html ? html.replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/\s{2,}/g, " ")
+          .trim() : (m.snippet ?? ""));
+      }
 
       return new Response(JSON.stringify({
         id: m.id,
@@ -225,6 +252,10 @@ Deno.serve(async (req) => {
         snippet: m.snippet ?? "",
         body: bodyText,
         unread: (m.labelIds ?? []).includes("UNREAD"),
+        bodyUnavailable: usedMetadataFallback,
+        scopeWarning: usedMetadataFallback
+          ? "The saved Google refresh token only has Gmail metadata permission. Re-authorize it with https://www.googleapis.com/auth/gmail.readonly to read full email bodies."
+          : undefined,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 

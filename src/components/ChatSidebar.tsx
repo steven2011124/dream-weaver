@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, MessageSquare, Pencil, Trash2, Settings, PanelLeftClose, PanelLeftOpen, X, Cpu, Battery, HardDrive, Wifi, Bluetooth, User } from "lucide-react";
+import { Plus, MessageSquare, Pencil, Trash2, Settings, PanelLeftClose, PanelLeftOpen, X, Cpu, Battery, HardDrive, Wifi, Bluetooth, User, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Chat } from "@/lib/sarvis";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -135,38 +135,43 @@ const BACKEND_URL_FOR_SYSINFO =
 const SystemInfoComponent = () => {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
+
+  const fetchSystemInfo = async () => {
+    setRefreshing(true);
+    try {
+      const response = await fetch(`${BACKEND_URL_FOR_SYSINFO}/api/system-info?t=${Date.now()}`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(1500),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      setSystemInfo(data);
+      setLastSynced(new Date());
+      setUnavailable(false);
+    } catch {
+      setUnavailable(true);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    const fetchSystemInfo = async () => {
-      try {
-        const response = await fetch(`${BACKEND_URL_FOR_SYSINFO}/api/system-info`, {
-          // short timeout so we don't hang the UI
-          signal: AbortSignal.timeout(2500),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        if (!cancelled) {
-          setSystemInfo(data);
-          setUnavailable(false);
-        }
-      } catch {
-        // Backend bridge is not running (typical in hosted preview).
-        // Stop polling silently to avoid log spam.
-        if (!cancelled) {
-          setUnavailable(true);
-          if (interval) clearInterval(interval);
-        }
-      }
+    let inFlight = false;
+    const sync = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      await fetchSystemInfo();
+      inFlight = false;
     };
 
-    fetchSystemInfo();
-    interval = setInterval(fetchSystemInfo, 5000);
+    sync();
+    const interval = setInterval(sync, 2000);
     return () => {
       cancelled = true;
-      if (interval) clearInterval(interval);
+      clearInterval(interval);
     };
   }, []);
 
@@ -180,7 +185,7 @@ const SystemInfoComponent = () => {
           <ModelToggle />
         </div>
         <div className="text-xs text-muted-foreground">
-          Local bridge offline. Start the backend (<code>cd backend && npm run dev</code>) to see live CPU/RAM/battery.
+          Local bridge offline. Retrying automatically…
         </div>
       </div>
     );
@@ -189,15 +194,29 @@ const SystemInfoComponent = () => {
   if (!systemInfo) {
     return (
       <div className="p-4 border-t border-sidebar-border">
-        <div className="text-xs text-muted-foreground">Loading system info…</div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <RefreshCw className="h-3 w-3 animate-spin" />
+          Syncing system info…
+        </div>
       </div>
     );
   }
 
   return (
     <div className="p-4 border-t border-sidebar-border space-y-2">
-      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
-        System Info
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          System Info
+        </div>
+        <button
+          type="button"
+          onClick={fetchSystemInfo}
+          className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          aria-label="Refresh system info"
+          title="Refresh system info"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+        </button>
       </div>
       <div className="space-y-1 text-xs">
         <div className="flex items-center justify-between">
@@ -238,6 +257,11 @@ const SystemInfoComponent = () => {
         <div className="text-xs text-muted-foreground mt-2">
           Uptime: {systemInfo.uptime}
         </div>
+        {lastSynced && (
+          <div className="text-[11px] text-muted-foreground/80">
+            Synced {lastSynced.toLocaleTimeString()}
+          </div>
+        )}
       </div>
     </div>
   );

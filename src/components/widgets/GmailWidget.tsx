@@ -142,9 +142,16 @@ export const GmailWidget = () => {
               </div>
             )}
             {!openLoading && openMsg && (
-              <pre className="whitespace-pre-wrap break-words font-sans text-sm text-foreground/90">
-                {openMsg.body || openMsg.snippet || "(empty body)"}
-              </pre>
+              <div className="space-y-3">
+                {openMsg.scopeWarning && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                    {openMsg.scopeWarning}
+                  </div>
+                )}
+                <pre className="whitespace-pre-wrap break-words font-sans text-sm text-foreground/90">
+                  {openMsg.body || openMsg.snippet || (openMsg.bodyUnavailable ? "Body preview unavailable until Gmail readonly scope is granted." : "(empty body)")}
+                </pre>
+              </div>
             )}
           </ScrollArea>
         </DialogContent>

@@ -38,6 +38,19 @@ function commandExists(cmd) {
   }
 }
 
+function safeExec(cmd, fallback = "N/A", timeout = 600) {
+  try {
+    const output = execSync(cmd, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout,
+    }).trim();
+    return output || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // Utility: normalize URL (add https:// if no scheme)
 function normalizeUrl(urlStr) {
   if (!urlStr) return urlStr;
@@ -496,43 +509,39 @@ app.get("/api/system-info", (req, res) => {
 const getSystemInfo = (os) => {
   const info = {
     os,
-    username: execSync("whoami").toString().trim(),
+    username: safeExec("whoami", "Unknown", 300),
     time: new Date().toISOString(),
-    uptime: execSync("uptime").toString().trim(),
+    uptime: safeExec("uptime", "N/A", 500),
   };
 
-  try {
-    switch (os) {
-      case "linux":
-        info.cpu = execSync("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'").toString().trim();
-        info.ram = execSync("free -h | grep Mem | awk '{print $3 \"/\" $2}'").toString().trim();
-        info.storage = execSync("df -h / | tail -1 | awk '{print $3 \"/\" $2 \" (\" $5 \" used)\"}'").toString().trim();
-        info.battery = execSync("upower -i $(upower -e | grep BAT) | grep percentage | awk '{print $2}'").toString().trim();
-        info.wifi = execSync("nmcli dev wifi | grep '*' | awk '{print $3}'").toString().trim();
-        info.netStat = execSync("ip route get 8.8.8.8 | awk '{print $5}'").toString().trim();
-        info.bluetooth = execSync("bluetoothctl show | grep Powered | awk '{print $2}'").toString().trim();
-        break;
-      case "windows":
-        info.cpu = execSync("wmic cpu get loadpercentage /value").toString().split("=")[1].trim();
-        info.ram = execSync("wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /value").toString().trim();
-        info.storage = execSync("wmic logicaldisk get size,freespace,caption /value").toString().trim();
-        info.battery = execSync("powercfg /batteryreport /output battery.html && findstr /C:\"Remaining Capacity\" battery.html").toString().trim();
-        info.wifi = execSync("netsh wlan show interfaces | findstr SSID").toString().trim();
-        info.netStat = execSync("ipconfig | findstr IPv4").toString().trim();
-        info.bluetooth = "Check Bluetooth settings";
-        break;
-      case "darwin":
-        info.cpu = execSync("ps -A -o %cpu | awk '{s+=$1} END {print s}'").toString().trim();
-        info.ram = execSync("vm_stat | grep 'Pages active' | awk '{print $3}'").toString().trim();
-        info.storage = execSync("df -h / | tail -1 | awk '{print $3 \"/\" $2}'").toString().trim();
-        info.battery = execSync("pmset -g batt | grep -o '[0-9]*%'").toString().trim();
-        info.wifi = execSync("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I | awk '/ SSID/ {print substr($0, index($0, $2))}'").toString().trim();
-        info.netStat = execSync("ifconfig | grep inet | grep -v inet6 | head -1 | awk '{print $2}'").toString().trim();
-        info.bluetooth = execSync("system_profiler SPBluetoothDataType | grep -A 5 'Bluetooth:' | grep 'State:' | awk '{print $2}'").toString().trim();
-        break;
-    }
-  } catch (e) {
-    // Some commands might fail, continue with available info
+  switch (os) {
+    case "linux":
+      info.cpu = safeExec("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'");
+      info.ram = safeExec("free -h | grep Mem | awk '{print $3 \"/\" $2}'");
+      info.storage = safeExec("df -h / | tail -1 | awk '{print $3 \"/\" $2 \" (\" $5 \" used)\"}'");
+      info.battery = safeExec("upower -i $(upower -e | grep BAT | head -1) | grep percentage | awk '{print $2}'", "N/A", 700);
+      info.wifi = safeExec("nmcli -t -f active,ssid dev wifi | awk -F: '$1==\"yes\"{print $2; exit}'", "N/A", 700);
+      info.netStat = safeExec("ip route get 8.8.8.8 | awk '{print $5; exit}'", "N/A", 500);
+      info.bluetooth = safeExec("bluetoothctl show | awk '/Powered/ {print $2; exit}'", "N/A", 500);
+      break;
+    case "windows":
+      info.cpu = safeExec("wmic cpu get loadpercentage /value", "N/A", 700).split("=").pop()?.trim() || "N/A";
+      info.ram = safeExec("wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /value", "N/A", 700);
+      info.storage = safeExec("wmic logicaldisk get size,freespace,caption /value", "N/A", 700);
+      info.battery = safeExec("WMIC Path Win32_Battery Get EstimatedChargeRemaining /Value", "N/A", 700).replace("EstimatedChargeRemaining=", "");
+      info.wifi = safeExec("netsh wlan show interfaces | findstr SSID", "N/A", 700);
+      info.netStat = safeExec("ipconfig | findstr IPv4", "N/A", 700);
+      info.bluetooth = "Check Bluetooth settings";
+      break;
+    case "darwin":
+      info.cpu = safeExec("ps -A -o %cpu | awk '{s+=$1} END {print s}'", "N/A", 700);
+      info.ram = safeExec("vm_stat | grep 'Pages active' | awk '{print $3}'", "N/A", 700);
+      info.storage = safeExec("df -h / | tail -1 | awk '{print $3 \"/\" $2}'", "N/A", 500);
+      info.battery = safeExec("pmset -g batt | grep -o '[0-9]*%' | head -1", "N/A", 700);
+      info.wifi = safeExec("/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I | awk '/ SSID/ {print substr($0, index($0, $2)); exit}'", "N/A", 700);
+      info.netStat = safeExec("ifconfig | grep inet | grep -v inet6 | head -1 | awk '{print $2}'", "N/A", 500);
+      info.bluetooth = safeExec("system_profiler SPBluetoothDataType -detailLevel mini | awk '/State:/ {print $2; exit}'", "N/A", 900);
+      break;
   }
 
   return info;

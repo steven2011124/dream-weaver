@@ -172,7 +172,10 @@ export async function streamChat({
   signal?: AbortSignal;
 }) {
   try {
-    const resp = await fetch(`${PROJECT_URL}/functions/v1/chat`, {
+    // Uncensored Hugging Face router models route through a different edge function.
+    const { isHfModel } = await import("@/lib/settings");
+    const endpoint = model && isHfModel(model) ? "hf-chat" : "chat";
+    const resp = await fetch(`${PROJECT_URL}/functions/v1/${endpoint}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -182,6 +185,9 @@ export async function streamChat({
         messages,
         model,
         systemPrompt,
+        hackerMode: typeof window !== "undefined" && (() => {
+          try { return JSON.parse(localStorage.getItem("sarvis_settings") || "{}").hackerMode === true; } catch { return false; }
+        })(),
       }),
       signal,
     });

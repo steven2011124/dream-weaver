@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { detectIntent, executeIntent } from "@/lib/intents";
+import { speakWithMaleVoice } from "@/lib/voice";
 import { Phone, Sparkles, Image as ImageIcon, ArrowUp, Menu, Paperclip, X, Plus, FileText, Presentation, Film, GraduationCap, Check, Terminal, Square, LayoutDashboard } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
@@ -123,6 +125,7 @@ const Index = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialized = useRef(false);
+  const navigate = useNavigate();
   const profileShownRef = useRef(false);
   const streamAbortControllerRef = useRef<AbortController | null>(null);
 
@@ -146,7 +149,12 @@ const Index = () => {
     if (initialized.current) return;
     initialized.current = true;
     const loaded = loadChats();
-    if (loaded.length > 0) {
+    // Always start with a fresh chat at the top if the user wants it.
+    if (settings.alwaysNewChatOnLaunch) {
+      const c = newChat();
+      setChats([c, ...loaded]);
+      setActiveId(c.id);
+    } else if (loaded.length > 0) {
       setChats(loaded);
       setActiveId(loaded[0].id);
     } else {
@@ -155,13 +163,11 @@ const Index = () => {
       setActiveId(c.id);
     }
 
-    // Personalized startup briefing — runs once per app load.
     if (settings.startupBriefing) {
       (async () => {
         try {
           const { buildStartupBriefing } = await import("@/lib/briefing");
           const result = await buildStartupBriefing(settings);
-          // Append to whichever chat is active (or the first chat).
           setChats((prev) => {
             if (prev.length === 0) return prev;
             const target = prev[0];
@@ -169,12 +175,19 @@ const Index = () => {
             return prev.map((c) => (c.id === target.id ? { ...c, messages: [...c.messages, msg] } : c));
           });
           setSettings((s) => ({ ...s, lastBriefing: result.newSnapshot }));
+          // Speak the briefing aloud when the user turned on startup sound.
+          if (settings.startupSound) {
+            // Strip markdown for cleaner TTS
+            const spoken = result.text.replace(/[#*_`>[\]()]/g, "").replace(/https?:\/\/\S+/g, "");
+            speakWithMaleVoice(spoken.slice(0, 1200));
+          }
         } catch (e) {
           console.warn("[sarvis] briefing failed", e);
         }
       })();
     }
   }, []);
+
 
   // Monitor study mode and show profile dialog if needed
   useEffect(() => {
@@ -354,7 +367,24 @@ const Index = () => {
 
     const chatId = activeChat.id;
 
+    // ---- Fast-path intents: open <site>, search, theme switch, clear chats, play music ----
+    if (text && !text.startsWith("/")) {
+      const intent = detectIntent(text);
+      const result = executeIntent(intent, {
+        setTheme: (theme) => setSettings({ ...settings, theme }),
+        clearChats: () => handleClearAll(),
+        navigate: (path) => navigate(path),
+      });
+      if (result.handled) {
+        appendMessage(chatId, newMessage("user", text));
+        appendMessage(chatId, newMessage("assistant", result.reply));
+        setInput("");
+        return;
+      }
+    }
+
     // ---- SARVIS slash commands (execute on backend) ----
+
     if (text && isSlashCommand(text)) {
       const result = buildCommand(settings.os, text);
       const { cmd, arg } = parseSlash(text);

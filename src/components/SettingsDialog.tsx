@@ -270,9 +270,40 @@ export const SettingsDialog = ({
                 <input type="checkbox" checked={settings.useLocalModel}
                   onChange={(e) => onChange({ ...settings, useLocalModel: e.target.checked })} className="h-4 w-4" />
               </label>
-              <p className="text-[11px] text-muted-foreground">
-                Local model uses the SARVIS bridge on <code>localhost:3001</code> with Ollama or a GGUF file. Real-time features (news, dashboard) won't work offline.
-              </p>
+              <label className="flex items-center justify-between text-sm">
+                <span>Startup sound (speak the greeting aloud)</span>
+                <input type="checkbox" checked={settings.startupSound}
+                  onChange={(e) => onChange({ ...settings, startupSound: e.target.checked })} className="h-4 w-4" />
+              </label>
+              <label className="flex items-center justify-between text-sm">
+                <span>Always start with a fresh chat</span>
+                <input type="checkbox" checked={settings.alwaysNewChatOnLaunch}
+                  onChange={(e) => onChange({ ...settings, alwaysNewChatOnLaunch: e.target.checked })} className="h-4 w-4" />
+              </label>
+              <label className="flex items-center justify-between text-sm">
+                <span>🔓 Hacker mode (uncensored HF models + unrestricted terminal)</span>
+                <input type="checkbox" checked={settings.hackerMode}
+                  onChange={(e) => onChange({ ...settings, hackerMode: e.target.checked })} className="h-4 w-4" />
+              </label>
+              <label className="flex items-center justify-between text-sm">
+                <span>Run SARVIS on system startup <span className="text-[10px] text-muted-foreground">(desktop app only)</span></span>
+                <input
+                  type="checkbox"
+                  checked={!!settings.runOnStartup}
+                  onChange={async (e) => {
+                    const enabled = e.target.checked;
+                    onChange({ ...settings, runOnStartup: enabled });
+                    const desktop = (window as unknown as { sarvisDesktop?: { setAutostart: (b: boolean) => Promise<unknown> } }).sarvisDesktop;
+                    if (desktop?.setAutostart) {
+                      try { await desktop.setAutostart(enabled); toast.success(enabled ? "Run on startup enabled" : "Run on startup disabled"); }
+                      catch { toast.error("Couldn't toggle autostart"); }
+                    } else {
+                      toast.info("Autostart only works in the SARVIS desktop app (Electron). See ELECTRON.md.");
+                    }
+                  }}
+                  className="h-4 w-4"
+                />
+              </label>
               <div className="flex items-center gap-2">
                 <input
                   id="gguf-picker"

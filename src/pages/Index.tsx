@@ -367,7 +367,24 @@ const Index = () => {
 
     const chatId = activeChat.id;
 
+    // ---- Fast-path intents: open <site>, search, theme switch, clear chats, play music ----
+    if (text && !text.startsWith("/")) {
+      const intent = detectIntent(text);
+      const result = executeIntent(intent, {
+        setTheme: (theme) => setSettings({ ...settings, theme }),
+        clearChats: () => handleClearAll(),
+        navigate: (path) => navigate(path),
+      });
+      if (result.handled) {
+        appendMessage(chatId, newMessage("user", text));
+        appendMessage(chatId, newMessage("assistant", result.reply));
+        setInput("");
+        return;
+      }
+    }
+
     // ---- SARVIS slash commands (execute on backend) ----
+
     if (text && isSlashCommand(text)) {
       const result = buildCommand(settings.os, text);
       const { cmd, arg } = parseSlash(text);

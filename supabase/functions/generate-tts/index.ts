@@ -39,13 +39,14 @@ async function generateTTS(text: string): Promise<string> {
         body: JSON.stringify({
           input: { text },
           voice: {
-            languageCode: "en-GB", // British English for Jarvis-like effect
-            name: "en-GB-Standard-B", // Male voice
+            languageCode: "en-GB",
+            // Neural2-B is a deep, natural-sounding British male — far less robotic than Standard.
+            name: "en-GB-Neural2-B",
           },
           audioConfig: {
             audioEncoding: "MP3",
-            pitch: -2, // Lower pitch for formal sound
-            speakingRate: 0.9, // Slightly slower for formality
+            pitch: -1.5,
+            speakingRate: 1.0,
           },
         }),
       }

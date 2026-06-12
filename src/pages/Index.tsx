@@ -789,7 +789,7 @@ const Index = () => {
       appendMessage(chatId, placeholder);
       setStreamingId(placeholder.id);
 
-      const result = await generateImage(text);
+      const result = await generateImage(text, { uncensored: settings.hackerMode });
       setStreamingId(null);
 
       if (result.error) {

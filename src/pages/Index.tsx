@@ -789,7 +789,7 @@ const Index = () => {
       appendMessage(chatId, placeholder);
       setStreamingId(placeholder.id);
 
-      const result = await generateImage(text);
+      const result = await generateImage(text, { uncensored: settings.hackerMode });
       setStreamingId(null);
 
       if (result.error) {
@@ -927,6 +927,7 @@ const Index = () => {
       videoFrames: result.videoFrames,
       narration: result.narration,
       secondsPerFrame: result.secondsPerFrame,
+      videoBase64: result.videoBase64,
     });
     toast.success(`${label} ready`);
   };

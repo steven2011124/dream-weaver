@@ -15,6 +15,8 @@ export interface GenFileResult {
   videoFrames?: VideoFrame[];
   narration?: string;
   secondsPerFrame?: number;
+  // Real video path: a base64-encoded MP4 produced by an HF text-to-video model.
+  videoBase64?: string;
   error?: string;
 }
 
@@ -53,10 +55,24 @@ export async function generateSlides(topic: string, model?: string, themeId?: st
 }
 
 export async function generateVideo(prompt: string, model?: string): Promise<GenFileResult> {
+  // 1. Try the real HF text-to-video pipeline first.
   try {
-    const { data, error } = await supabase.functions.invoke("generate-video", {
-      body: { prompt, model },
-    });
+    const { data, error } = await supabase.functions.invoke("hf-video", { body: { prompt } });
+    if (!error && !data?.error && data?.videoBase64) {
+      return {
+        title: data.title,
+        videoBase64: data.videoBase64,
+        mimeType: data.mimeType ?? "video/mp4",
+        speakText: prompt,
+      };
+    }
+    console.warn("hf-video unavailable, falling back to slideshow:", error?.message ?? data?.error);
+  } catch (e) {
+    console.warn("hf-video threw, falling back:", e);
+  }
+  // 2. Fallback: storyboard slideshow stitched on the client.
+  try {
+    const { data, error } = await supabase.functions.invoke("generate-video", { body: { prompt, model } });
     if (error) return { error: error.message };
     if (data?.error) return { error: data.error };
     return {
@@ -70,3 +86,4 @@ export async function generateVideo(prompt: string, model?: string): Promise<Gen
     return { error: e instanceof Error ? e.message : "Video generation failed" };
   }
 }
+

@@ -71,8 +71,9 @@ export function speakWithMaleVoice(text: string): Promise<void> {
       try {
         window.speechSynthesis.cancel();
         const utter = new SpeechSynthesisUtterance(clean);
-        utter.rate = 0.95;
-        utter.pitch = 0.7;
+        // Tuned to sound natural and JARVIS-like (Daniel/UK male), not robotic.
+        utter.rate = 1.0;
+        utter.pitch = 0.92;
         utter.volume = 1.0;
         const voice = pickMaleEnglishVoice();
         if (voice) {

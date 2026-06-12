@@ -927,6 +927,7 @@ const Index = () => {
       videoFrames: result.videoFrames,
       narration: result.narration,
       secondsPerFrame: result.secondsPerFrame,
+      videoBase64: result.videoBase64,
     });
     toast.success(`${label} ready`);
   };

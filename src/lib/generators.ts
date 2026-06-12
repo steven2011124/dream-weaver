@@ -15,6 +15,9 @@ export interface GenFileResult {
   videoFrames?: VideoFrame[];
   narration?: string;
   secondsPerFrame?: number;
+  // Real video path: a base64-encoded MP4 produced by an HF text-to-video model.
+  videoBase64?: string;
+  mimeType?: string;
   error?: string;
 }
 

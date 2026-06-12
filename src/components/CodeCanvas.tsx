@@ -31,6 +31,8 @@ export interface CanvasContent {
   videoFrames?: VideoFrame[];
   narration?: string;
   secondsPerFrame?: number;
+  // Real video path: a base64 MP4 from the HF text-to-video model — used directly without stitching.
+  videoBase64?: string;
 }
 
 interface CodeCanvasProps {

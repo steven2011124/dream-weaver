@@ -44,6 +44,14 @@ export type Intent =
   | { kind: "set_theme"; theme: Theme }
   | { kind: "clear_chats" }
   | { kind: "open_dashboard" }
+  // --- Self-modification ---
+  | { kind: "ui_hide"; phrase: string }
+  | { kind: "ui_show"; phrase: string }
+  | { kind: "ui_reset" }
+  // --- OS control (Electron desktop only) ---
+  | { kind: "os_shell"; command: string }
+  | { kind: "os_launch"; target: string }
+  | { kind: "os_scaffold"; name: string; type: "html" | "node" | "python" }
   | { kind: "none" };
 
 const THEME_WORDS: Record<string, Theme> = {
@@ -65,6 +73,49 @@ export function detectIntent(raw: string): Intent {
   if (themeWord && THEME_WORDS[themeWord]) {
     return { kind: "set_theme", theme: THEME_WORDS[themeWord] };
   }
+
+  // ---- Self-modification (UI overrides) ----
+  if (/\b(reset|restore|clear)\s+(the\s+)?(ui|interface|overrides|customizations)\b/.test(t)) {
+    return { kind: "ui_reset" };
+  }
+  const hideMatch = t.match(/\b(?:hide|remove|delete|get rid of)\s+(?:the\s+)?(.+?)(?:\s+from\s+(?:the\s+)?(?:ui|interface|page|app))?\.?$/);
+  if (hideMatch && !/\b(chat|conversation|message|history)\b/.test(hideMatch[1])) {
+    return { kind: "ui_hide", phrase: hideMatch[1].trim() };
+  }
+  const showMatch = t.match(/\b(?:show|restore|bring back|unhide)\s+(?:the\s+)?(.+?)\.?$/);
+  if (showMatch) return { kind: "ui_show", phrase: showMatch[1].trim() };
+
+  // ---- OS: scaffold an app ----
+  const scaffoldMatch = t.match(/\b(?:create|make|build|scaffold|generate)\s+(?:me\s+)?(?:an?\s+)?(html|node|python|web|cli)\s+app(?:\s+(?:called|named)\s+([\w-]+))?/);
+  if (scaffoldMatch) {
+    const rawType = scaffoldMatch[1];
+    const type = rawType === "web" ? "html" : rawType === "cli" ? "node" : (rawType as "html" | "node" | "python");
+    return { kind: "os_scaffold", name: scaffoldMatch[2] || `sarvis-${type}-${Date.now().toString(36)}`, type };
+  }
+
+  // ---- OS: launch app ("open calculator", "launch vscode") ----
+  const launchMatch = t.match(/^(?:launch|start|run|open)\s+(?:the\s+)?(calculator|notepad|terminal|spotify|vscode|code|chrome|firefox|safari|finder|explorer|files|settings)\b/);
+  if (launchMatch) {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const isMac = /Mac|iPhone|iPad/i.test(ua);
+    const isWin = /Win/i.test(ua);
+    const apps: Record<string, string> = {
+      calculator: isMac ? "Calculator" : isWin ? "calc.exe" : "gnome-calculator",
+      notepad: isWin ? "notepad.exe" : isMac ? "TextEdit" : "gedit",
+      terminal: isMac ? "Terminal" : isWin ? "wt.exe" : "gnome-terminal",
+      spotify: "Spotify",
+      vscode: "Visual Studio Code", code: "code",
+      chrome: isMac ? "Google Chrome" : "chrome",
+      firefox: "firefox", safari: "Safari",
+      finder: "Finder", explorer: "explorer.exe", files: "Files",
+      settings: isMac ? "System Settings" : isWin ? "ms-settings:" : "gnome-control-center",
+    };
+    return { kind: "os_launch", target: apps[launchMatch[1]] || launchMatch[1] };
+  }
+
+  // ---- OS: raw shell ("run: <cmd>" / "exec: <cmd>") ----
+  const shellMatch = raw.trim().match(/^(?:run|exec|shell|cmd|terminal)[:\s]+(.+)$/i);
+  if (shellMatch) return { kind: "os_shell", command: shellMatch[1].trim() };
 
   // ---- Clear all chats ----
   if (/\b(clear|delete|wipe|reset)\s+(all\s+)?(of\s+)?(our|my)?\s*(chats?|conversations?|history)\b/.test(t)) {
@@ -116,10 +167,13 @@ export function detectIntent(raw: string): Intent {
   return { kind: "none" };
 }
 
-export function executeIntent(
+import { hideElement, showElement, resolveSelector, resetOverrides } from "./uiOverrides";
+import { getDesktop } from "./desktop";
+
+export async function executeIntent(
   intent: Intent,
   helpers: { setTheme: (t: Theme) => void; clearChats: () => void; navigate: (path: string) => void },
-): { handled: boolean; reply: string } {
+): Promise<{ handled: boolean; reply: string }> {
   switch (intent.kind) {
     case "open_url": {
       window.open(intent.url, "_blank", "noopener,noreferrer");
@@ -147,6 +201,49 @@ export function executeIntent(
       helpers.navigate("/dashboard");
       return { handled: true, reply: "Opening dashboard." };
     }
+
+    // ---- Self-modification (browser-safe) ----
+    case "ui_hide": {
+      const sel = resolveSelector(intent.phrase);
+      if (!sel) return { handled: true, reply: `I couldn't find "${intent.phrase}" on this page. Try a more specific name (e.g. "the settings button").` };
+      hideElement(sel);
+      return { handled: true, reply: `Hidden \`${sel}\`. Say "show ${intent.phrase}" to bring it back, or "reset the UI" to undo everything.` };
+    }
+    case "ui_show": {
+      const sel = resolveSelector(intent.phrase);
+      if (!sel) { resetOverrides(); return { handled: true, reply: `I couldn't locate "${intent.phrase}", so I reset all UI overrides instead.` }; }
+      showElement(sel);
+      return { handled: true, reply: `Restored \`${sel}\`.` };
+    }
+    case "ui_reset": {
+      resetOverrides();
+      return { handled: true, reply: "All UI overrides cleared." };
+    }
+
+    // ---- OS control (Electron-only) ----
+    case "os_shell": {
+      const d = getDesktop();
+      if (!d) return { handled: true, reply: "Shell commands need the desktop build. Run `npm run electron` to enable OS control." };
+      const r = await d.runShell(intent.command);
+      if (r.cancelled) return { handled: true, reply: "Cancelled." };
+      if (!r.ok) return { handled: true, reply: `\`\`\`\n${r.error || r.stderr || "failed"}\n\`\`\`` };
+      return { handled: true, reply: `\`\`\`\n${(r.stdout || "(no output)").slice(0, 2000)}\n\`\`\`` };
+    }
+    case "os_launch": {
+      const d = getDesktop();
+      if (!d) return { handled: true, reply: `Launching apps needs the desktop build. (Would launch: **${intent.target}**)` };
+      const r = await d.launchApp(intent.target);
+      if (r.cancelled) return { handled: true, reply: "Cancelled." };
+      return { handled: true, reply: r.ok ? `Launched **${intent.target}**.` : `Failed: ${r.error}` };
+    }
+    case "os_scaffold": {
+      const d = getDesktop();
+      if (!d) return { handled: true, reply: `App scaffolding needs the desktop build. (Would create ${intent.type} app **${intent.name}**)` };
+      const r = await d.scaffoldApp({ name: intent.name, type: intent.type });
+      if (r.cancelled) return { handled: true, reply: "Cancelled." };
+      return { handled: true, reply: r.ok ? `Created **${intent.name}** at \`${r.path}\` and opened the folder.` : `Failed: ${r.error}` };
+    }
+
     default:
       return { handled: false, reply: "" };
   }

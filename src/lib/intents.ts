@@ -96,13 +96,19 @@ export function detectIntent(raw: string): Intent {
   // ---- OS: launch app ("open calculator", "launch vscode") ----
   const launchMatch = t.match(/^(?:launch|start|run|open)\s+(?:the\s+)?(calculator|notepad|terminal|spotify|vscode|code|chrome|firefox|safari|finder|explorer|files|settings)\b/);
   if (launchMatch) {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const isMac = /Mac|iPhone|iPad/i.test(ua);
+    const isWin = /Win/i.test(ua);
     const apps: Record<string, string> = {
-      calculator: process(/mac/i) ? "Calculator" : "calc.exe",
-      notepad: "notepad.exe", terminal: process(/mac/i) ? "Terminal" : "wt.exe",
-      spotify: "Spotify", vscode: "Visual Studio Code", code: "code",
-      chrome: process(/mac/i) ? "Google Chrome" : "chrome.exe", firefox: "firefox",
-      safari: "Safari", finder: "Finder", explorer: "explorer.exe",
-      files: "Files", settings: process(/mac/i) ? "System Settings" : "ms-settings:",
+      calculator: isMac ? "Calculator" : isWin ? "calc.exe" : "gnome-calculator",
+      notepad: isWin ? "notepad.exe" : isMac ? "TextEdit" : "gedit",
+      terminal: isMac ? "Terminal" : isWin ? "wt.exe" : "gnome-terminal",
+      spotify: "Spotify",
+      vscode: "Visual Studio Code", code: "code",
+      chrome: isMac ? "Google Chrome" : "chrome",
+      firefox: "firefox", safari: "Safari",
+      finder: "Finder", explorer: "explorer.exe", files: "Files",
+      settings: isMac ? "System Settings" : isWin ? "ms-settings:" : "gnome-control-center",
     };
     return { kind: "os_launch", target: apps[launchMatch[1]] || launchMatch[1] };
   }

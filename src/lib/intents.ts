@@ -167,10 +167,13 @@ export function detectIntent(raw: string): Intent {
   return { kind: "none" };
 }
 
-export function executeIntent(
+import { hideElement, showElement, resolveSelector, resetOverrides } from "./uiOverrides";
+import { getDesktop } from "./desktop";
+
+export async function executeIntent(
   intent: Intent,
   helpers: { setTheme: (t: Theme) => void; clearChats: () => void; navigate: (path: string) => void },
-): { handled: boolean; reply: string } {
+): Promise<{ handled: boolean; reply: string }> {
   switch (intent.kind) {
     case "open_url": {
       window.open(intent.url, "_blank", "noopener,noreferrer");
@@ -198,6 +201,49 @@ export function executeIntent(
       helpers.navigate("/dashboard");
       return { handled: true, reply: "Opening dashboard." };
     }
+
+    // ---- Self-modification (browser-safe) ----
+    case "ui_hide": {
+      const sel = resolveSelector(intent.phrase);
+      if (!sel) return { handled: true, reply: `I couldn't find "${intent.phrase}" on this page. Try a more specific name (e.g. "the settings button").` };
+      hideElement(sel);
+      return { handled: true, reply: `Hidden \`${sel}\`. Say "show ${intent.phrase}" to bring it back, or "reset the UI" to undo everything.` };
+    }
+    case "ui_show": {
+      const sel = resolveSelector(intent.phrase);
+      if (!sel) { resetOverrides(); return { handled: true, reply: `I couldn't locate "${intent.phrase}", so I reset all UI overrides instead.` }; }
+      showElement(sel);
+      return { handled: true, reply: `Restored \`${sel}\`.` };
+    }
+    case "ui_reset": {
+      resetOverrides();
+      return { handled: true, reply: "All UI overrides cleared." };
+    }
+
+    // ---- OS control (Electron-only) ----
+    case "os_shell": {
+      const d = getDesktop();
+      if (!d) return { handled: true, reply: "Shell commands need the desktop build. Run `npm run electron` to enable OS control." };
+      const r = await d.runShell(intent.command);
+      if (r.cancelled) return { handled: true, reply: "Cancelled." };
+      if (!r.ok) return { handled: true, reply: `\`\`\`\n${r.error || r.stderr || "failed"}\n\`\`\`` };
+      return { handled: true, reply: `\`\`\`\n${(r.stdout || "(no output)").slice(0, 2000)}\n\`\`\`` };
+    }
+    case "os_launch": {
+      const d = getDesktop();
+      if (!d) return { handled: true, reply: `Launching apps needs the desktop build. (Would launch: **${intent.target}**)` };
+      const r = await d.launchApp(intent.target);
+      if (r.cancelled) return { handled: true, reply: "Cancelled." };
+      return { handled: true, reply: r.ok ? `Launched **${intent.target}**.` : `Failed: ${r.error}` };
+    }
+    case "os_scaffold": {
+      const d = getDesktop();
+      if (!d) return { handled: true, reply: `App scaffolding needs the desktop build. (Would create ${intent.type} app **${intent.name}**)` };
+      const r = await d.scaffoldApp({ name: intent.name, type: intent.type });
+      if (r.cancelled) return { handled: true, reply: "Cancelled." };
+      return { handled: true, reply: r.ok ? `Created **${intent.name}** at \`${r.path}\` and opened the folder.` : `Failed: ${r.error}` };
+    }
+
     default:
       return { handled: false, reply: "" };
   }

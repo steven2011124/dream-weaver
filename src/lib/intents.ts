@@ -44,6 +44,14 @@ export type Intent =
   | { kind: "set_theme"; theme: Theme }
   | { kind: "clear_chats" }
   | { kind: "open_dashboard" }
+  // --- Self-modification ---
+  | { kind: "ui_hide"; phrase: string }
+  | { kind: "ui_show"; phrase: string }
+  | { kind: "ui_reset" }
+  // --- OS control (Electron desktop only) ---
+  | { kind: "os_shell"; command: string }
+  | { kind: "os_launch"; target: string }
+  | { kind: "os_scaffold"; name: string; type: "html" | "node" | "python" }
   | { kind: "none" };
 
 const THEME_WORDS: Record<string, Theme> = {

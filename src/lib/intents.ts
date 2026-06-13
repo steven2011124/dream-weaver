@@ -74,6 +74,43 @@ export function detectIntent(raw: string): Intent {
     return { kind: "set_theme", theme: THEME_WORDS[themeWord] };
   }
 
+  // ---- Self-modification (UI overrides) ----
+  if (/\b(reset|restore|clear)\s+(the\s+)?(ui|interface|overrides|customizations)\b/.test(t)) {
+    return { kind: "ui_reset" };
+  }
+  const hideMatch = t.match(/\b(?:hide|remove|delete|get rid of)\s+(?:the\s+)?(.+?)(?:\s+from\s+(?:the\s+)?(?:ui|interface|page|app))?\.?$/);
+  if (hideMatch && !/\b(chat|conversation|message|history)\b/.test(hideMatch[1])) {
+    return { kind: "ui_hide", phrase: hideMatch[1].trim() };
+  }
+  const showMatch = t.match(/\b(?:show|restore|bring back|unhide)\s+(?:the\s+)?(.+?)\.?$/);
+  if (showMatch) return { kind: "ui_show", phrase: showMatch[1].trim() };
+
+  // ---- OS: scaffold an app ----
+  const scaffoldMatch = t.match(/\b(?:create|make|build|scaffold|generate)\s+(?:me\s+)?(?:an?\s+)?(html|node|python|web|cli)\s+app(?:\s+(?:called|named)\s+([\w-]+))?/);
+  if (scaffoldMatch) {
+    const rawType = scaffoldMatch[1];
+    const type = rawType === "web" ? "html" : rawType === "cli" ? "node" : (rawType as "html" | "node" | "python");
+    return { kind: "os_scaffold", name: scaffoldMatch[2] || `sarvis-${type}-${Date.now().toString(36)}`, type };
+  }
+
+  // ---- OS: launch app ("open calculator", "launch vscode") ----
+  const launchMatch = t.match(/^(?:launch|start|run|open)\s+(?:the\s+)?(calculator|notepad|terminal|spotify|vscode|code|chrome|firefox|safari|finder|explorer|files|settings)\b/);
+  if (launchMatch) {
+    const apps: Record<string, string> = {
+      calculator: process(/mac/i) ? "Calculator" : "calc.exe",
+      notepad: "notepad.exe", terminal: process(/mac/i) ? "Terminal" : "wt.exe",
+      spotify: "Spotify", vscode: "Visual Studio Code", code: "code",
+      chrome: process(/mac/i) ? "Google Chrome" : "chrome.exe", firefox: "firefox",
+      safari: "Safari", finder: "Finder", explorer: "explorer.exe",
+      files: "Files", settings: process(/mac/i) ? "System Settings" : "ms-settings:",
+    };
+    return { kind: "os_launch", target: apps[launchMatch[1]] || launchMatch[1] };
+  }
+
+  // ---- OS: raw shell ("run: <cmd>" / "exec: <cmd>") ----
+  const shellMatch = raw.trim().match(/^(?:run|exec|shell|cmd|terminal)[:\s]+(.+)$/i);
+  if (shellMatch) return { kind: "os_shell", command: shellMatch[1].trim() };
+
   // ---- Clear all chats ----
   if (/\b(clear|delete|wipe|reset)\s+(all\s+)?(of\s+)?(our|my)?\s*(chats?|conversations?|history)\b/.test(t)) {
     return { kind: "clear_chats" };

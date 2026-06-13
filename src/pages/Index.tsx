@@ -370,7 +370,7 @@ const Index = () => {
     // ---- Fast-path intents: open <site>, search, theme switch, clear chats, play music ----
     if (text && !text.startsWith("/")) {
       const intent = detectIntent(text);
-      const result = executeIntent(intent, {
+      const result = await executeIntent(intent, {
         setTheme: (theme) => setSettings({ ...settings, theme }),
         clearChats: () => handleClearAll(),
         navigate: (path) => navigate(path),

@@ -31,6 +31,8 @@ export interface CanvasContent {
   videoFrames?: VideoFrame[];
   narration?: string;
   secondsPerFrame?: number;
+  // Real video path: a base64 MP4 from the HF text-to-video model — used directly without stitching.
+  videoBase64?: string;
 }
 
 interface CodeCanvasProps {
@@ -96,7 +98,17 @@ export const CodeCanvas = ({ open, content, onClose }: CodeCanvasProps) => {
   useEffect(() => {
     let cancelled = false;
     let createdUrl: string | null = null;
-    if (content?.kind === "video" && content.videoFrames && content.videoFrames.length > 0) {
+    if (content?.kind === "video" && content.videoBase64) {
+      // Real MP4 from the HF text-to-video model — play it directly.
+      try {
+        createdUrl = b64ToBlobUrl(content.videoBase64, "video/mp4");
+        setVideoUrl(createdUrl);
+        setVideoFilename(`${(content.title ?? "video").replace(/[^a-z0-9]+/gi, "_")}.mp4`);
+      } catch (e) {
+        console.error("video decode error", e);
+        toast.error("Failed to decode generated video");
+      }
+    } else if (content?.kind === "video" && content.videoFrames && content.videoFrames.length > 0) {
       setStitching(true);
       setStitchStep("Preparing…");
       stitchVideo({
@@ -127,6 +139,7 @@ export const CodeCanvas = ({ open, content, onClose }: CodeCanvasProps) => {
       if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
   }, [content]);
+
 
   useEffect(() => {
     return () => {

@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "vite",
     "dev:backend": "node backend/server.mjs",
+    "dev:keys": "node scripts/keys-viewer.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "electron": "electron electron/main.cjs",
+    "electron:pack": "npx @electron/packager . SARVIS --platform=linux --arch=x64 --out=electron-release --overwrite --ignore='^/src' --ignore='^/electron-release' --ignore='^/supabase'"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

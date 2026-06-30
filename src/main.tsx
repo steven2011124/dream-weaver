@@ -1,6 +1,10 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import { applyOverrides } from "./lib/uiOverrides";
+
+// Apply persisted UI self-modifications before render so the page never flashes.
+applyOverrides();
 
 // Add global error handler
 window.addEventListener("error", (event) => {

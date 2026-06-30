@@ -52,43 +52,52 @@ export function speakableText(input: string): string {
 }
 
 /**
- * Speak the given text with the JARVIS-like male voice. Resolves when done
- * (or immediately if speech synthesis is unavailable).
+ * Speak the given text with the JARVIS-like male voice. Resolves when done.
+ * Tries ElevenLabs (deep, natural British male via the eleven-tts edge
+ * function) first, then falls back to the browser's SpeechSynthesis API.
  */
 export function speakWithMaleVoice(text: string): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) {
-      resolve();
-      return;
-    }
-    const clean = speakableText(text).trim();
-    if (!clean) {
-      resolve();
-      return;
-    }
+  const clean = speakableText(text).trim();
+  if (!clean) return Promise.resolve();
+  return speakWithElevenLabs(clean).catch(() => speakWithBrowser(clean));
+}
 
+let currentAudio: HTMLAudioElement | null = null;
+
+async function speakWithElevenLabs(text: string): Promise<void> {
+  const { supabase } = await import("@/integrations/supabase/client");
+  const { data, error } = await supabase.functions.invoke("eleven-tts", { body: { text } });
+  if (error || !data?.audioContent) throw error || new Error("no audio");
+  return new Promise((resolve) => {
+    try {
+      if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+      const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
+      currentAudio = audio;
+      audio.onended = () => { currentAudio = null; resolve(); };
+      audio.onerror = () => { currentAudio = null; resolve(); };
+      void audio.play().catch(() => resolve());
+    } catch { resolve(); }
+  });
+}
+
+function speakWithBrowser(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return resolve();
     const doSpeak = () => {
       try {
         window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(clean);
-        utter.rate = 0.95;
-        utter.pitch = 0.7;
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 1.0;
+        utter.pitch = 0.92;
         utter.volume = 1.0;
         const voice = pickMaleEnglishVoice();
-        if (voice) {
-          utter.voice = voice;
-          utter.lang = voice.lang;
-        } else {
-          utter.lang = "en-GB";
-        }
+        if (voice) { utter.voice = voice; utter.lang = voice.lang; }
+        else utter.lang = "en-GB";
         utter.onend = () => resolve();
         utter.onerror = () => resolve();
         window.speechSynthesis.speak(utter);
-      } catch {
-        resolve();
-      }
+      } catch { resolve(); }
     };
-
     if (window.speechSynthesis.getVoices().length === 0) {
       const handler = () => {
         window.speechSynthesis.removeEventListener("voiceschanged", handler);
@@ -96,8 +105,6 @@ export function speakWithMaleVoice(text: string): Promise<void> {
       };
       window.speechSynthesis.addEventListener("voiceschanged", handler);
       setTimeout(doSpeak, 400);
-    } else {
-      doSpeak();
-    }
+    } else doSpeak();
   });
 }

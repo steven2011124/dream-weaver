@@ -172,7 +172,10 @@ export async function streamChat({
   signal?: AbortSignal;
 }) {
   try {
-    const resp = await fetch(`${PROJECT_URL}/functions/v1/chat`, {
+    // Uncensored Hugging Face router models route through a different edge function.
+    const { isHfModel } = await import("@/lib/settings");
+    const endpoint = model && isHfModel(model) ? "hf-chat" : "chat";
+    const resp = await fetch(`${PROJECT_URL}/functions/v1/${endpoint}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -182,6 +185,9 @@ export async function streamChat({
         messages,
         model,
         systemPrompt,
+        hackerMode: typeof window !== "undefined" && (() => {
+          try { return JSON.parse(localStorage.getItem("sarvis_settings") || "{}").hackerMode === true; } catch { return false; }
+        })(),
       }),
       signal,
     });
@@ -249,18 +255,37 @@ export async function streamChat({
   }
 }
 
-export async function generateImage(prompt: string): Promise<{ imageUrl?: string; text?: string; error?: string }> {
+export async function generateImage(
+  prompt: string,
+  opts: { uncensored?: boolean } = {},
+): Promise<{ imageUrl?: string; text?: string; error?: string }> {
+  // Hacker Mode → go straight to the HF uncensored route.
+  if (opts.uncensored) {
+    try {
+      const { data, error } = await supabase.functions.invoke("hf-image", { body: { prompt } });
+      if (!error && data?.imageUrl) return { imageUrl: data.imageUrl };
+      console.warn("hf-image failed, falling back to default:", error?.message ?? data?.error);
+    } catch (e) {
+      console.warn("hf-image threw, falling back:", e);
+    }
+  }
   try {
-    const { data, error } = await supabase.functions.invoke("generate-image", {
-      body: { prompt },
-    });
+    const { data, error } = await supabase.functions.invoke("generate-image", { body: { prompt } });
     if (error) return { error: error.message };
-    if (data?.error) return { error: data.error };
+    if (data?.error) {
+      // Default provider refused (content policy etc.) — try the uncensored fallback once.
+      if (!opts.uncensored) {
+        const hf = await supabase.functions.invoke("hf-image", { body: { prompt } });
+        if (!hf.error && hf.data?.imageUrl) return { imageUrl: hf.data.imageUrl };
+      }
+      return { error: data.error };
+    }
     return { imageUrl: data?.imageUrl, text: data?.text };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Image API Error" };
   }
 }
+
 
 // Non-streaming chat used by voice call (we want the full reply before TTS).
 export async function sendChat({

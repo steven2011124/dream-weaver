@@ -1,16 +1,19 @@
 # Roadmap
 
-This file is read by the Planner role every cycle. Keep it short and
-concrete — bullet points the agent can turn into single, bounded tasks.
-Move items to "Done" as the agent (or you) completes them; the agent's
-memory in `.agent/memory.json` also tracks this, but this file is the
-human-editable source of intent.
-
 ## Now
-- (add your next 3-5 concrete tasks here)
+- Fix EAS build upload failure (~180MB) — ensure node_modules is properly
+  excluded via .easignore/eas.json rather than the manual
+  `mv node_modules ~/tmp/nm_backup` workaround.
+- Add basic pytest coverage for pc_agent.py's Discord command handlers
+  (currently untested).
+- Audit App.js for the expo-router vs `"main": "App.js"` workaround —
+  document why it's needed or find a permanent structural fix.
 
 ## Later
-- (bigger items, not yet broken down into bounded tasks)
+- Polish VNC-over-SSH (x11vnc) screen-sharing flow.
+- Review PC Shell / Phone Shell tabs for command injection risk (anything
+  that passes user/Discord input into a shell command should be
+  parameterized, not string-concatenated).
 
 ## Done
-- (the agent and memory.json will accumulate this automatically over time)
+- (populated automatically by the agent's memory over time)

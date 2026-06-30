@@ -1,17 +1,9 @@
-# config.yaml — all agent tunables live here.
-# Secrets (API keys, webhooks) come from environment variables / GH Actions
-# secrets, never from this file.
-
 target_repo:
-  # If the agent operates on the SAME repo the workflow runs in, leave blank.
-  # If it operates on a DIFFERENT repo, set "owner/name" and make sure
-  # GH_PAT (a PAT with repo scope) is set as a secret.
   full_name: ""
   default_branch: "main"
 
 llm:
-  # "anthropic", "openai", or "auto" (tries anthropic first, falls back to openai)
-  provider: "auto"
+  provider: "anthropic"
   anthropic_model: "claude-opus-4-6"
   openai_model: "gpt-4.1"
   max_tokens: 4096
@@ -21,28 +13,30 @@ planning:
   roadmap_path: "ROADMAP.md"
   memory_path: ".agent/memory.json"
   scan_todo_comments: true
-  todo_file_globs: ["**/*.py", "**/*.js", "**/*.ts", "**/*.ino", "**/*.sh"]
+  todo_file_globs:
+    - "pc_agent.py"
+    - "App.js"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.py"
   consider_open_issues: true
   max_candidate_tasks: 8
 
 limits:
-  max_files_per_run: 6
-  max_lines_changed_per_run: 400
+  max_files_per_run: 4
+  max_lines_changed_per_run: 250
   max_reviewer_retries: 2
   max_debugger_retries: 3
   max_planner_retries: 1
 
 testing:
-  # Shell command run inside the repo root. Non-zero exit = failure.
-  test_command: "pytest -q"
-  test_timeout_seconds: 600
-  # Optional separate build command, run before tests. Leave blank to skip.
+  test_command: "python -m py_compile pc_agent.py"
+  test_timeout_seconds: 300
   build_command: ""
 
 protected_paths:
-  # Glob patterns the agent will NEVER modify, create, or delete.
-  # Enforced in code (agent/github_client.py:is_path_protected), this list
-  # is the single source of truth.
   - ".env"
   - ".env.*"
   - "secrets/**"
@@ -52,18 +46,19 @@ protected_paths:
   - "**/*.key"
   - ".github/workflows/**"
   - ".git/**"
+  - "eas.json"
+  - ".easignore"
+  - "app.json"
+  - "app.config.js"
 
 schema_review:
-  # Files matching these patterns get the "needs-human-review" label
-  # automatically and are excluded from any future auto-merge automation.
   patterns:
     - "**/migrations/**"
     - "**/schema.sql"
-    - "**/*schema*.py"
 
 git:
   branch_prefix: "agent/"
-  commit_author_name: "Autonomous AI Engineer"
+  commit_author_name: "Dream-Weaver AI Engineer"
   commit_author_email: "agent@steelinx.local"
   open_pr: true
   pr_label: "ai-generated"
